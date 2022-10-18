@@ -2,20 +2,9 @@
 title: "My document title"
 author: "My name"
 date: "Started YYYY-MM-DD. Last compiled `r format(Sys.time(), '%Y-%m-%d %H:%M')`."
-
 output: 
-    html_document:
-        # The highlighter is needed to assign styling tags to the code's HTML.
+    html_document: 
         highlight: breezedark
-        css: 
-            - "font_atkinson_hyperlegible.css"
-            - "font_fira_code.css"
-            - "theme_andesine.css"
-            - "highlight_andesine.css"          # Not colourblind-friendly
-            # - "highlight_pebblesafe_dark.css"   # Colourblind-friendly
-            # - "highlight_pebblesafe_light.css"  # Colourblind-friendly
-            # - "no_ligatures.css"                # Disable Fira Code's ligatures
-        
         toc: true
         toc_float:
             collapsed: false 
@@ -25,23 +14,23 @@ output:
         self_contained: true
         smart: false
         df_print: paged
-        
-editor_options: 
-  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-    # Cache chunks? Caching sometimes creates bugs, so explicitly turn it off 
-    # in the chunk's options with `cache=FALSE`.
-    cache = TRUE
+    # Cache chunks? Caching sometimes creates bugs, so explicitly turn it on 
+    # in the chunk's options with `cache=TRUE`.
+    cache = FALSE,
+    # Default DPI of plots. This is low by default to keep file sizes down, but
+    # it's also here to remind you that you can increase it on a per-chunk basis
+    # if you want.
+    dpi = 96
     )
 ```
 
-
 # Packages used
 
-```{r install_librarian, cache = TRUE, include = FALSE}
+```{r install_librarian, include = FALSE}
 # This chunk installs the package-management package 'librarian' if it is 
 # not already installed. This code will not appear in the final document.
 
@@ -67,100 +56,68 @@ rm(librarian_installer)
 ```
 
 ```{r packages_used}
-librarian::shelf(tidyverse, tidymodels, janitor, uuid, DesiQuintans/desiderata,
+librarian::shelf(janitor,
                  quiet = TRUE)
 ```
 
+
 # Aim of this document
 
-In this document, I want to see whether petal area or sepal area can be used to predict whether an iris belongs to the species *Iris versicolor*, compared to the other candidate species *I. virginica* or *I. setosa*.
+In this document, I will...
 
 ## Context of this work
 
 This analysis is part of the project...
 
-# Data import
 
-```{r data_import}
-binomial_iris <- 
-    iris %>% 
-    mutate(is_versicolor = as.integer(Species == "versicolor"),
-           is_versicolor = as.factor(is_versicolor),
-           petal_area = Petal.Length * Petal.Width, 
-           sepal_area = Sepal.Length * Sepal.Width) %>% 
-    # Good practice, I think, to use UUIDs to facilitate finding/filtering 
-    # unique observations!
-    mutate(uuid = UUIDgenerate(n = n())) %>% 
-    select(uuid, petal_area, sepal_area, is_versicolor, spp = Species) %>% 
-    glimpse()
+# Demonstration code and output
 
-ensure("All UUIDs are locally unique", 
-       anyDuplicated(binomial_iris$uuid) == 0)
-```
-
-# Prepare training and test subsets
-
-```{r build_subsets}
-train_iris <-
-    binomial_iris %>% 
-    group_by(is_versicolor) %>% 
-    slice_sample(prop = 0.75)
-
-test_iris <- 
-    anti_join(binomial_iris,
-              train_iris,
-              by = "uuid")
-
-ensure("All rows appear in either 'train' or 'predict' subsets",
-       c(train_iris$uuid, test_iris$uuid) %pctin% binomial_iris$uuid == 1)
-
-ensure("No UUIDs appear in both subsets",
-       anyDuplicated(train_iris$uuid, test_iris$uuid) == 0)
-```
-
-# Peek at the data
-
-From the conditional distribution plots (CDFs) below, it looks like mid-range `petal_area` is a good predictor of _I. versicolor_. `sepal_area` is a worse predictor of species, but higher values of `sepal_area` are informative.
+Here's some example code from `desiderata::percentile()`, one of my favourite functions.
 
 ```{r}
-plot_arrange(
-    cdplot(is_versicolor ~ petal_area, data = train_iris,
-           col = c("green", "grey")),
-    cdplot(is_versicolor ~ sepal_area, data = train_iris,
-           col = c("green", "grey")),
-    nrow = 1, ncol = 2
-)
+#' Quick percentile overview
+#'
+#' Break down a vector into useful percentiles. If the 25th percentile is 10.5, 
+#' for example, then 25 % of the observations are < 10.5.
+percentile <- function(num, 
+                       cuts = c(0, 0.025, 0.10, 0.20, 0.25, 0.33, 0.50, 
+                                0.66, 0.75, 0.80, 0.85, 0.90, 
+                                0.95, 0.99, 0.9975, 1.0), 
+                       na.rm = FALSE, cld = FALSE, plot = FALSE, ...) {
+    results <- stats::quantile(num, cuts, na.rm = na.rm)
+
+    if (typeof(cld) == "character") {
+        names(results) <- paste0("p", seq_along(results))
+        results <- signif(results, digits = 2)
+        return(glue::glue_data(results, cld))
+    } else if (plot == FALSE) {
+        return(results)
+    } else {
+        graphics::plot(results ~ cuts, xaxt = "n", type = "c", lty = 2,
+             xlab = "Percentile", ylab = "Value", col = "gray", ...)
+        graphics::axis(1, at = cuts, labels = names(results))
+        graphics::text(x = cuts, y = results, 
+                       labels = format(results, digits = 3), adj = c(0.5, 0.5),
+                       col = "black", font = 2, cex = 0.75)
+    }
+}
 ```
 
-
-
-# Fit logistic regression model
+What does this function do for us? Well, we can get a quick percentile overview of a range of measurements. The predefined `cuts` are located at useful intervals for this:
 
 ```{r}
-multi_model <- 
-    logistic_reg() %>% 
-    set_engine("glm") %>% 
-    fit(is_versicolor ~ petal_area * sepal_area, data = train_iris)
-
-tidy(multi_model)
+percentile(iris$Petal.Length)
 ```
 
-
-# Test the accuracy of the model
+And we can graph the percentiles to see what this range of measurements looks like:
 
 ```{r}
-predictions <- 
-    multi_model %>% 
-    predict(new_data = test_iris) %>% 
-    bind_cols(test_iris) %>% 
-    mutate(correct = .pred_class == is_versicolor) %>% 
-    glimpse()
-
-sum(predictions$correct) / length(predictions$correct)
+percentile(iris$Petal.Length, plot = TRUE)
 ```
 
 
---------------------------------------------------------------------------------
+
+
 
 # Session information
 
@@ -168,4 +125,556 @@ sum(predictions$correct) / length(predictions$correct)
 sessioninfo::session_info()
 ```
 
-This document is made using the [andesine]()
+<small>This document uses the [andesine](https://github.com/DesiQuintans/andesine) RMarkdown template.</small>
+
+--------------------------------------------------------------------------------
+
+
+```{css explanation, echo=FALSE, eval=FALSE}
+/* I'm embedding the CSS into this file so that the template can exist as a single file. I had previously imported this CSS from external files, but this meant that whenever I wanted to make a new document with this template, I was required to create a new directory just to hold the template and all its files. I prefer to have all of my analysis documents in the same directory, so this is what I have to do to make that happen. */
+```
+```{css font_atkinson_hyperlegible, echo=FALSE}
+/* font_atkinson_hyperlegible.css */
+
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt43C1KxNDXMspQ1lPyU89-1h6ONRlW45G056IkUwCybQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt43C1KxNDXMspQ1lPyU89-1h6ONRlW45G056IqUwA.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt93C1KxNDXMspQ1lPyU89-1h6ONRlW45G056qRdhWDTFieFA.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt93C1KxNDXMspQ1lPyU89-1h6ONRlW45G056qRdhWNTFg.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt23C1KxNDXMspQ1lPyU89-1h6ONRlW45G07JIoSwQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt23C1KxNDXMspQ1lPyU89-1h6ONRlW45G04pIo.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt73C1KxNDXMspQ1lPyU89-1h6ONRlW45G8Wbc9eiWPVFw.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/atkinsonhyperlegible/v10/9Bt73C1KxNDXMspQ1lPyU89-1h6ONRlW45G8Wbc9dCWP.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+```
+```{css font_fira_code, echo=FALSE}
+/* font_fira_code.css */
+
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0NSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh2dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3tSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0370-03FF;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh09SDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3dSDqFeedTMX.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0NSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh2dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3tSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0370-03FF;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh09SDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3dSDqFeedTMX.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0NSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh2dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3tSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0370-03FF;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh09SDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3dSDqFeedTMX.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0NSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh2dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3tSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0370-03FF;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh09SDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3dSDqFeedTMX.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0NSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh2dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh0dSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3tSDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0370-03FF;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh09SDqFeedTMXxPQ.woff2) format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Fira Code';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/firacode/v21/uU9NCBsR6Z2vfE9aq3bh3dSDqFeedTMX.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Replace fonts in United template with my own. */
+/* Variable font */
+body {
+    font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-size: 18px;
+}
+
+h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6 {
+    font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    color: #DD4814;
+    margin-top: 1em;
+}
+
+.tooltip{font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;}
+.popover{font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;}
+
+/* Monospace font */
+
+code, kbd, pre, samp {
+    font-family: "Fira Code", "Hack", "Consolas", monospace;
+    font-size: 15px;
+}
+
+/* Title and author block */
+h1.title {
+    font-size: 50px;
+}
+
+.author, .date {
+    font-size: 25px;
+    color: black;
+}
+
+.date {
+    margin-top: 0em;
+    font-size: 20px;
+    color: black;
+}
+
+/* Style H1s to be more visually prominent */
+
+h1:not(.title) {
+    margin-top: 2em;
+    padding: 0.25em 0em;
+    border-top: 1px solid #808080;
+    border-bottom: 1px solid #808080;
+}
+```
+```{css no_ligatures, echo=FALSE, eval=FALSE}
+* {
+  font-variant-ligatures: none;
+}
+```
+```{css theme_andesine, echo=FALSE}
+/* Replace fonts in United template with my own. */
+/* Variable font */
+body {
+    font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-size: 18px;
+}
+
+h1,h2,h3,h4,h5,h6,.h1,.h2,.h3,.h4,.h5,.h6 {
+    font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    color: #DD4814;
+    margin-top: 1em;
+}
+
+.tooltip{font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;}
+.popover{font-family:"Atkinson Hyperlegible","Ubuntu",Tahoma,"Helvetica Neue",Helvetica,Arial,sans-serif;}
+
+/* Monospace font */
+
+code, kbd, pre, samp {
+    font-family: "Fira Code", "Hack", "Consolas", monospace;
+    font-size: 15px;
+}
+
+/* Title and author block */
+h1.title {
+    font-size: 50px;
+}
+
+.author, .date {
+    font-size: 25px;
+    color: black;
+}
+
+.date {
+    margin-top: 0em;
+    font-size: 20px;
+    color: black;
+}
+
+/* Style H1s to be more visually prominent */
+
+h1:not(.title) {
+    margin-top: 2em;
+    padding: 0.25em 0em;
+    border-top: 1px solid #808080;
+    border-bottom: 1px solid #808080;
+}
+```
+```{css highlight_andesine_dark, echo=FALSE}
+/* 
+    Highlighter: Andesine Dark
+    Not colourblind-friendly.
+
+    These colours are based on the Breezedark highlighter in Pandoc.
+    The only change I made was to lighten the colour of function names.
+*/
+
+.sourceCode {
+    color: #FCFCFC !important;
+    font-weight: 400 !important;
+    border: none !important;
+}
+
+span.fu {color: #ba81d6 !important;   /*  fu = Names of functions                        */
+        font-weight: 500 !important;}
+
+span.at {color: #2980B9 !important;   /*  at = Function arguments                        */
+        font-weight: 400 !important;}
+
+span.cf {color: #FD9B3D !important;   /*  cf = Flow control like if, else, function()    */
+        font-weight: 600 !important;}
+
+span.cn {color: #27AEAE !important;   /*  cn = Constants like TRUE, FALSE, NA            */
+        font-weight: 600 !important;}
+
+span.co {color: #7A7C7D !important;   /*  co = Comments, including all Roxygen text      */
+        font-weight: 400 !important;}
+
+span.dv {color: #D5671A !important;   /*  dv = Integers                                  */
+        font-weight: 400 !important;}
+
+span.fl {color: #D5671A !important;   /*  fl = Floating point numbers                    */
+        font-weight: 400 !important;}
+
+span.ot {color: #27AE60 !important;   /*  ot = Assignment operators (= and <-)           */
+        font-weight: 500 !important;}
+
+span.sc {color: #3DAEE9 !important;   /*  sc = Other operators (==, %in%, ::, and so on) */
+        font-weight: 500 !important;}
+
+span.st {color: #F44F4F !important;   /*  st = Character string                          */
+        font-weight: 400 !important;}
+
+```
+```{css highlight_pebblesafe_dark, echo=FALSE}
+/* 
+    Highlighter: Pebble-safe Dark
+    Colourblind-friendly.
+    https://github.com/DesiQuintans/Pebble-safe
+
+    These colours are based on my Pebble-safe colourblind editor theme.
+*/
+
+.sourceCode {
+    background-color: #2D2D2D !important;
+    color: #FCFCFC !important;
+    font-weight: 400 !important;
+    border: none !important;
+}
+
+span.fu {color: #FFE119 !important;   /*  fu = Names of functions                        */
+        font-weight: 500 !important;}
+
+span.at {color: #FCFCFC !important;   /*  at = Function arguments                        */
+        font-weight: 400 !important;}
+
+span.cf {color: #FFE119 !important;   /*  cf = Flow control like if, else, function()    */
+        font-weight: 600 !important;}
+
+span.cn {color: #E6BEFF !important;   /*  cn = Constants like TRUE, FALSE, NA            */
+        font-weight: 600 !important;}
+
+span.co {color: #E7298A !important;   /*  co = Comments, including all Roxygen text      */
+        font-weight: 300 !important;}
+
+span.dv {color: #E6BEFF !important;   /*  dv = Integers                                  */
+        font-weight: 400 !important;}
+
+span.fl {color: #E6BEFF !important;   /*  fl = Floating point numbers                    */
+        font-weight: 400 !important;}
+
+span.ot {color: #FCFCFC !important;   /*  ot = Assignment operators (= and <-)           */
+        font-weight: 500 !important;}
+
+span.sc {color: #FCFCFC !important;   /*  sc = Other operators (==, %in%, ::, and so on) */
+        font-weight: 500 !important;}
+
+span.st {color: #E6BEFF !important;   /*  st = Character string                          */
+        font-weight: 400 !important;}
+
+```

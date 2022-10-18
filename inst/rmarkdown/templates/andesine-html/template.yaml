@@ -1,5 +1,5 @@
 name: Andesine (HTML)
 description: >
-   A template for HTML output with comprehensive YAML options. Based on the
-   United theme and the Breezedark highlighter, with CSS modifications.
+   Readable HTML output with colourblind-friendly syntax highlighting options
+   and custom fonts (Atkinson Hyperlegible and Fira Code).
 create_dir: FALSE
