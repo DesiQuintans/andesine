@@ -1,0 +1,22 @@
+/* 
+    Highlighter: Andesine
+    Not colourblind-friendly.
+
+    These colours are based on the Breezedark highlighter in Pandoc.
+    The only change I made was to lighten the colour of function names.
+*/
+
+pre.sourceCode {
+    color: #FCFCFC !important;
+}
+
+span.fu {color: #ba81d6 !important;}  /*  fu = Names of functions                        */
+span.at {color: #2980B9 !important;}  /*  at = Function arguments                        */
+span.cf {color: #FD9B3D !important;}  /*  cf = function, if, else, and so on.            */
+span.cn {color: #27AEAE !important;}  /*  cn = TRUE, FALSE, NA, and so on.               */
+span.co {color: #7A7C7D !important;}  /*  co = Comments, including all Roxygen text.     */
+span.dv {color: #D5671A !important;}  /*  dv = Integers                                  */
+span.fl {color: #D5671A !important;}  /*  fl = Floating point numbers                    */
+span.ot {color: #27AE60 !important;}  /*  ot = Assignment operators = and <-             */
+span.sc {color: #3DAEE9 !important;}  /*  sc = Other operators (==, %in%, ::, and so on) */
+span.st {color: #F44F4F !important;}  /*  st = Character string                          */

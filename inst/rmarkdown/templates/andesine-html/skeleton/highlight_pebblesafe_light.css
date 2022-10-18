@@ -1,0 +1,24 @@
+/* 
+    Highlighter: Pebble-safe Light
+    Colourblind-friendly.
+    https://github.com/DesiQuintans/Pebble-safe
+
+    These colours are based on my Pebble-safe colourblind editor theme.
+*/
+
+pre.sourceCode {
+    background-color: #FCFCFC !important;
+    color: #000000 !important;
+}
+
+span.fu {color: #4363D8 !important;   /*  fu = Names of functions                        */
+         font-weight:  bold;}
+span.at {color: #000000 !important;}  /*  at = Function arguments                        */
+span.cf {color: #4363D8 !important;}  /*  cf = function, if, else, and so on.            */
+span.cn {color: #E7298A !important;}  /*  cn = TRUE, FALSE, NA, and so on.               */
+span.co {color: #d0a0ea !important;}  /*  co = Comments, including all Roxygen text.     */
+span.dv {color: #E7298A !important;}  /*  dv = Integers                                  */
+span.fl {color: #E7298A !important;}  /*  fl = Floating point numbers                    */
+span.ot {color: #000000 !important;}  /*  ot = Assignment operators = and <-             */
+span.sc {color: #000000 !important;}  /*  sc = Other operators (==, %in%, ::, and so on) */
+span.st {color: #E7298A !important;}  /*  st = Character string                          */

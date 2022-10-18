@@ -1,0 +1,171 @@
+---
+title: "My document title"
+author: "My name"
+date: "Started YYYY-MM-DD. Last compiled `r format(Sys.time(), '%Y-%m-%d %H:%M')`."
+
+output: 
+    html_document:
+        # The highlighter is needed to assign styling tags to the code's HTML.
+        highlight: breezedark
+        css: 
+            - "font_atkinson_hyperlegible.css"
+            - "font_fira_code.css"
+            - "theme_andesine.css"
+            - "highlight_andesine.css"          # Not colourblind-friendly
+            # - "highlight_pebblesafe_dark.css"   # Colourblind-friendly
+            # - "highlight_pebblesafe_light.css"  # Colourblind-friendly
+            # - "no_ligatures.css"                # Disable Fira Code's ligatures
+        
+        toc: true
+        toc_float:
+            collapsed: false 
+            smooth_scroll: true
+        toc_depth: 3
+        number_sections: true
+        self_contained: true
+        smart: false
+        df_print: paged
+        
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    # Cache chunks? Caching sometimes creates bugs, so explicitly turn it off 
+    # in the chunk's options with `cache=FALSE`.
+    cache = TRUE
+    )
+```
+
+
+# Packages used
+
+```{r install_librarian, cache = TRUE, include = FALSE}
+# This chunk installs the package-management package 'librarian' if it is 
+# not already installed. This code will not appear in the final document.
+
+# 'librarian' makes it easy to add new packages to your Rmarkdown document; just
+# add the package's name to the list and it will automatically download the package
+# from CRAN, Bioconductor, or GitHub (if you also provide the GitHub username). 
+
+# For more details: 
+# https://github.com/DesiQuintans/librarian
+
+librarian_installer <- function() {
+    pkg_missing <- function(pkg) {
+        location <- tryCatch(find.package(pkg), error = function(e) {character(0)})
+        ifelse(length(location) == 0, TRUE, FALSE)
+    }
+    
+    if (pkg_missing("remotes"))  install.packages("remotes")
+    if (pkg_missing("librarian")) remotes::install_github("DesiQuintans/librarian")
+}
+
+librarian_installer()
+rm(librarian_installer)
+```
+
+```{r packages_used}
+librarian::shelf(tidyverse, tidymodels, janitor, uuid, DesiQuintans/desiderata,
+                 quiet = TRUE)
+```
+
+# Aim of this document
+
+In this document, I want to see whether petal area or sepal area can be used to predict whether an iris belongs to the species *Iris versicolor*, compared to the other candidate species *I. virginica* or *I. setosa*.
+
+## Context of this work
+
+This analysis is part of the project...
+
+# Data import
+
+```{r data_import}
+binomial_iris <- 
+    iris %>% 
+    mutate(is_versicolor = as.integer(Species == "versicolor"),
+           is_versicolor = as.factor(is_versicolor),
+           petal_area = Petal.Length * Petal.Width, 
+           sepal_area = Sepal.Length * Sepal.Width) %>% 
+    # Good practice, I think, to use UUIDs to facilitate finding/filtering 
+    # unique observations!
+    mutate(uuid = UUIDgenerate(n = n())) %>% 
+    select(uuid, petal_area, sepal_area, is_versicolor, spp = Species) %>% 
+    glimpse()
+
+ensure("All UUIDs are locally unique", 
+       anyDuplicated(binomial_iris$uuid) == 0)
+```
+
+# Prepare training and test subsets
+
+```{r build_subsets}
+train_iris <-
+    binomial_iris %>% 
+    group_by(is_versicolor) %>% 
+    slice_sample(prop = 0.75)
+
+test_iris <- 
+    anti_join(binomial_iris,
+              train_iris,
+              by = "uuid")
+
+ensure("All rows appear in either 'train' or 'predict' subsets",
+       c(train_iris$uuid, test_iris$uuid) %pctin% binomial_iris$uuid == 1)
+
+ensure("No UUIDs appear in both subsets",
+       anyDuplicated(train_iris$uuid, test_iris$uuid) == 0)
+```
+
+# Peek at the data
+
+From the conditional distribution plots (CDFs) below, it looks like mid-range `petal_area` is a good predictor of _I. versicolor_. `sepal_area` is a worse predictor of species, but higher values of `sepal_area` are informative.
+
+```{r}
+plot_arrange(
+    cdplot(is_versicolor ~ petal_area, data = train_iris,
+           col = c("green", "grey")),
+    cdplot(is_versicolor ~ sepal_area, data = train_iris,
+           col = c("green", "grey")),
+    nrow = 1, ncol = 2
+)
+```
+
+
+
+# Fit logistic regression model
+
+```{r}
+multi_model <- 
+    logistic_reg() %>% 
+    set_engine("glm") %>% 
+    fit(is_versicolor ~ petal_area * sepal_area, data = train_iris)
+
+tidy(multi_model)
+```
+
+
+# Test the accuracy of the model
+
+```{r}
+predictions <- 
+    multi_model %>% 
+    predict(new_data = test_iris) %>% 
+    bind_cols(test_iris) %>% 
+    mutate(correct = .pred_class == is_versicolor) %>% 
+    glimpse()
+
+sum(predictions$correct) / length(predictions$correct)
+```
+
+
+--------------------------------------------------------------------------------
+
+# Session information
+
+```{r}
+sessioninfo::session_info()
+```
+
+This document is made using the [andesine]()

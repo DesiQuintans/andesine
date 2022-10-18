@@ -1,0 +1,5 @@
+name: Andesine (HTML)
+description: >
+   A template for HTML output with comprehensive YAML options. Based on the
+   United theme and the Breezedark highlighter, with CSS modifications.
+create_dir: FALSE
