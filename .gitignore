@@ -7,6 +7,7 @@
 
 # User-specific files
 .Ruserdata
+_planning/
 
 # Example code in package build process
 *-Ex.R

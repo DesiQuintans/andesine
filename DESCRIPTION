@@ -1,11 +1,9 @@
 Package: andesine
 Type: Package
-Title: What the Package Does (Title Case)
+Title: andesine - Readable and colourblind-friendly HTML output for R Markdown
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Author: Desi Quintans
+Maintainer: Desi Quintans <science@desiquintans.com>
+Description: Body text typeset in Atkinson Hyperlegible, code typeset in Hack, colourblind-friendly syntax highlighting, other improvements.
 Encoding: UTF-8
 LazyData: true
